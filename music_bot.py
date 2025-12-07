@@ -65,7 +65,9 @@ async def musicas(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'no_warnings': True,
             'default_search': 'ytsearch1',  # Pesquisar no YouTube e pegar o primeiro resultado
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'referer': 'https://www.youtube.com/'
+            'referer': 'https://www.youtube.com/',
+            'no_check_certificate': True,
+            'extractor_args': {'youtube': {'skip': ['dash', 'hls']}} # Tentar evitar formatos que exigem mais autenticação
         }
         
         # Baixar a música
