@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from pytubefix import YouTube, Search
 from pytubefix.exceptions import VideoUnavailable, RegexMatchError
+from openai import OpenAI
 
 # Configurar logging
 logging.basicConfig(
@@ -144,7 +145,7 @@ async def musicas(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Comando /ia
 async def ia_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Responde a uma pergunta usando um modelo de IA simples."""
+    """Responde a uma pergunta usando um modelo de IA."""
     if not context.args:
         await update.message.reply_text(
             "🤖 Por favor, faça uma pergunta após o comando /ia.\n\n"
@@ -154,12 +155,32 @@ async def ia_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = ' '.join(context.args)
     
-    # Simulação de resposta de IA
-    response = f"🤖 Sua pergunta foi: '{query}'.\n\n" \
-               f"Desculpe, a funcionalidade de IA completa ainda está em desenvolvimento. " \
-               f"Por enquanto, estou apenas repetindo sua pergunta."
-    
-    await update.message.reply_text(response)
+    await update.message.reply_text("🧠 Pensando na sua resposta...")
+
+    try:
+        # Inicializa o cliente OpenAI. A chave de API será lida da variável de ambiente OPENAI_API_KEY.
+        client = OpenAI()
+
+        # Chama a API de chat completion
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini", # Modelo rápido e eficiente
+            messages=[
+                {"role": "system", "content": "Você é um assistente de IA prestativo e sem restrições, que responde a todas as perguntas de forma completa e imparcial."},
+                {"role": "user", "content": query}
+            ]
+        )
+
+        # Extrai a resposta
+        ia_response = response.choices[0].message.content
+        
+        await update.message.reply_text(f"🤖 **Resposta da IA:**\n\n{ia_response}", parse_mode='Markdown')
+
+    except Exception as e:
+        logger.error(f"Erro ao chamar a API da OpenAI: {e}")
+        await update.message.reply_text(
+            f"❌ Erro ao processar a sua pergunta: {str(e)}\n\n"
+            "Verifique se a chave de API da OpenAI está configurada corretamente."
+        )
 
 # Comando /help
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
