@@ -16,7 +16,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Token do bot
-BOT_TOKEN = "8515435251:AAE7Msl9elE9G3Cxx4rc8WlZaY3Y6vZoSEk"
+# O token foi movido para a variável de ambiente BOT_TOKEN por segurança.
+# O valor abaixo é um fallback para testes locais.
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8515435251:AAE7Msl9elE9G3Cxx4rc8WlZaY3Y6vZoSEk")
 
 # Diretório para downloads temporários
 DOWNLOAD_DIR = "/home/ubuntu/music_downloads"
