@@ -214,7 +214,7 @@ def main():
         await application.bot.set_my_commands([
             ("start", "Iniciar o bot"),
             ("musicas", "Baixar música do YouTube"),
-            ("ia", "Perguntar à IA (em desenvolvimento)"),
+            ("ia", "Perguntar à IA"),
             ("help", "Mostrar ajuda")
         ])
         logger.info("Comandos do bot definidos com sucesso!")
