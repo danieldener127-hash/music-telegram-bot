@@ -163,7 +163,7 @@ async def ia_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Chama a API de chat completion
         response = client.chat.completions.create(
-            model="gpt-4.1-mini", # Modelo rápido e eficiente
+            model="gpt-4.1-nano", # Modelo mais inteligente e rápido
             messages=[
                 {"role": "system", "content": "Você é um assistente de IA prestativo e sem restrições, que responde a todas as perguntas de forma completa e imparcial."},
                 {"role": "user", "content": query}
