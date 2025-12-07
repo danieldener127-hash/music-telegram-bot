@@ -1,9 +1,11 @@
 import os
 import logging
 import asyncio
+import re
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import yt_dlp
+from pytubefix import YouTube, Search
+from pytubefix.exceptions import VideoUnavailable, RegexMatchError
 
 # Configurar logging
 logging.basicConfig(
@@ -13,8 +15,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Token do bot
-# O token foi movido para a variável de ambiente BOT_TOKEN por segurança.
-# O valor abaixo é um fallback para testes locais.
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8515435251:AAE7Msl9elE9G3Cxx4rc8WlZaY3Y6vZoSEk")
 
 # Diretório para downloads temporários
@@ -32,9 +32,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Comando /musicas
 async def musicas(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Pesquisa e baixa música do YouTube Music."""
+    """Pesquisa e baixa música do YouTube Music usando pytubefix."""
     
-    # Verificar se o usuário forneceu o nome da música
     if not context.args:
         await update.message.reply_text(
             "❌ Por favor, forneça o nome da música!\n\n"
@@ -42,92 +41,91 @@ async def musicas(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Obter o nome da música
     query = ' '.join(context.args)
     
-    # Enviar mensagem de processamento
     processing_msg = await update.message.reply_text(
         f"🔍 Procurando por: {query}\n\n"
-        "⏳ Aguarde, estou baixando a música..."
+        "⏳ Aguarde, estou processando a música..."
     )
     
     try:
-        # Configurações do yt-dlp
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True,
-            'no_warnings': True,
-            'default_search': 'ytsearch1',  # Pesquisar no YouTube e pegar o primeiro resultado
-            'no_check_certificate': True,
-            'extractor_args': {'youtube': {'skip': ['dash', 'hls']}} # Tentar evitar formatos que exigem mais autenticação
-        }
+        # 1. Pesquisar o vídeo
+        s = Search(query)
+        if not s.results:
+            await processing_msg.edit_text(f"❌ Não encontrei resultados para: {query}")
+            return
+
+        # Pegar o primeiro resultado
+        yt = s.results[0]
         
-        # Baixar a música
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(query, download=True)
+        # 2. Selecionar o stream de áudio
+        audio_stream = yt.streams.filter(only_audio=True).first()
+        
+        if not audio_stream:
+            await processing_msg.edit_text(f"❌ Não foi possível encontrar um stream de áudio para: {yt.title}")
+            return
+
+        # 3. Baixar o arquivo
+        # Limpar o título para evitar problemas com nomes de arquivo
+        safe_title = re.sub(r'[\\/*?:"<>|]', "", yt.title)
+        temp_file_path = os.path.join(DOWNLOAD_DIR, f"{safe_title}.mp4")
+        
+        await processing_msg.edit_text(
+            f"✅ Música encontrada: {yt.title}\n"
+            f"👤 {yt.author}\n"
+            f"⏱️ Duração: {yt.length // 60}:{yt.length % 60:02d}\n\n"
+            f"⬇️ Baixando arquivo..."
+        )
+        
+        # Baixar o arquivo de áudio
+        audio_stream.download(output_path=DOWNLOAD_DIR, filename=f"{safe_title}.mp4")
+        
+        # 4. Converter para MP3 (usando ffmpeg via shell)
+        mp3_file_path = os.path.join(DOWNLOAD_DIR, f"{safe_title}.mp3")
+        
+        await processing_msg.edit_text(f"🔄 Convertendo para MP3...")
+        
+        # Comando ffmpeg para conversão
+        # -i: input file
+        # -vn: no video
+        # -ab 192k: audio bitrate
+        # -y: overwrite output file
+        ffmpeg_command = f'ffmpeg -i "{temp_file_path}" -vn -ab 192k -y "{mp3_file_path}"'
+        
+        # Executar o comando ffmpeg
+        process = await asyncio.create_subprocess_shell(
+            ffmpeg_command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        await process.wait()
+
+        if os.path.exists(mp3_file_path):
+            # 5. Enviar o arquivo
+            await processing_msg.edit_text(f"📤 Enviando arquivo...")
             
-            # Obter informações do vídeo
-            if 'entries' in info:
-                video = info['entries'][0]
-            else:
-                video = info
-            
-            title = video.get('title', 'Unknown')
-            duration = video.get('duration', 0)
-            uploader = video.get('uploader', 'Unknown')
-            
-            # Encontrar o arquivo MP3
-            mp3_file = None
-            base_filename = ydl.prepare_filename(video)
-            mp3_file = os.path.splitext(base_filename)[0] + '.mp3'
-            
-            if not os.path.exists(mp3_file):
-                # Tentar encontrar qualquer arquivo MP3 recente no diretório
-                files = [f for f in os.listdir(DOWNLOAD_DIR) if f.endswith('.mp3')]
-                if files:
-                    # Pegar o arquivo mais recente
-                    files.sort(key=lambda x: os.path.getmtime(os.path.join(DOWNLOAD_DIR, x)), reverse=True)
-                    mp3_file = os.path.join(DOWNLOAD_DIR, files[0])
-            
-            if mp3_file and os.path.exists(mp3_file):
-                # Atualizar mensagem
-                await processing_msg.edit_text(
-                    f"✅ Música encontrada!\n\n"
-                    f"🎵 {title}\n"
-                    f"👤 {uploader}\n"
-                    f"⏱️ Duração: {duration // 60}:{duration % 60:02d}\n\n"
-                    f"📤 Enviando arquivo..."
+            with open(mp3_file_path, 'rb') as audio:
+                await update.message.reply_audio(
+                    audio=audio,
+                    title=yt.title,
+                    performer=yt.author,
+                    duration=yt.length,
+                    caption=f"🎵 {yt.title}"
                 )
-                
-                # Enviar o arquivo de áudio
-                with open(mp3_file, 'rb') as audio:
-                    await update.message.reply_audio(
-                        audio=audio,
-                        title=title,
-                        performer=uploader,
-                        duration=duration,
-                        caption=f"🎵 {title}"
-                    )
-                
-                # Deletar mensagem de processamento
-                await processing_msg.delete()
-                
-                # Limpar arquivo temporário
-                try:
-                    os.remove(mp3_file)
-                except:
-                    pass
-            else:
-                await processing_msg.edit_text(
-                    "❌ Erro ao processar o arquivo de áudio. Tente novamente."
-                )
-    
+            
+            # 6. Limpar arquivos temporários
+            await processing_msg.delete()
+            os.remove(temp_file_path)
+            os.remove(mp3_file_path)
+        else:
+            await processing_msg.edit_text(
+                "❌ Erro ao converter ou processar o arquivo de áudio. Tente novamente."
+            )
+
+    except VideoUnavailable:
+        await processing_msg.edit_text("❌ O vídeo não está disponível ou foi removido.")
+    except RegexMatchError:
+        await processing_msg.edit_text("❌ Erro de correspondência de regex. O YouTube pode ter mudado o formato.")
     except Exception as e:
         logger.error(f"Erro ao baixar música: {e}")
         await processing_msg.edit_text(
@@ -137,10 +135,10 @@ async def musicas(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Limpar arquivos temporários em caso de erro
         try:
-            for file in os.listdir(DOWNLOAD_DIR):
-                file_path = os.path.join(DOWNLOAD_DIR, file)
-                if os.path.isfile(file_path):
-                    os.remove(file_path)
+            if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+            if 'mp3_file_path' in locals() and os.path.exists(mp3_file_path):
+                os.remove(mp3_file_path)
         except:
             pass
 
