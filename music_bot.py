@@ -142,6 +142,25 @@ async def musicas(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
+# Comando /ia
+async def ia_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Responde a uma pergunta usando um modelo de IA simples."""
+    if not context.args:
+        await update.message.reply_text(
+            "🤖 Por favor, faça uma pergunta após o comando /ia.\n\n"
+            "Exemplo: /ia Qual a capital do Brasil?"
+        )
+        return
+
+    query = ' '.join(context.args)
+    
+    # Simulação de resposta de IA
+    response = f"🤖 Sua pergunta foi: '{query}'.\n\n" \
+               f"Desculpe, a funcionalidade de IA completa ainda está em desenvolvimento. " \
+               f"Por enquanto, estou apenas repetindo sua pergunta."
+    
+    await update.message.reply_text(response)
+
 # Comando /help
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Envia mensagem de ajuda."""
@@ -166,6 +185,7 @@ def main():
     # Registrar handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("musicas", musicas))
+    application.add_handler(CommandHandler("ia", ia_command))
     application.add_handler(CommandHandler("help", help_command))
     
     # Função para definir os comandos do bot
@@ -173,6 +193,7 @@ def main():
         await application.bot.set_my_commands([
             ("start", "Iniciar o bot"),
             ("musicas", "Baixar música do YouTube"),
+            ("ia", "Perguntar à IA (em desenvolvimento)"),
             ("help", "Mostrar ajuda")
         ])
         logger.info("Comandos do bot definidos com sucesso!")
